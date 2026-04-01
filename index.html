@@ -42,7 +42,7 @@
       <button id="btnR">Reset</button>
     </div>
 
-    <div class="hint">
+    <div class="hint" id="sideHint">
       Tip: Pick a weapon in the workshop (1/2/3), then press A to forge.<br>
       Strike inside the bright Timing zone and keep Heat inside the recipe range.<br>
       Quench cools fast, but quenching too hot can crack the blade.
@@ -54,6 +54,7 @@
   const c = document.getElementById("cv");
   const g = c.getContext("2d");
 
+  // Simple "ILI9341-ish" colors
   const COL = {
     black:"#000", white:"#fff",
     navy:"#000050", blue:"#0050c8", cyan:"#00c8c8",
@@ -66,13 +67,13 @@
   let page = 0;
   let loadingEnd = 0;
 
-  // Economy / upgrades
+  // Economy / upgrades (management)
   let coins = 0;
-  let upHammer = 0;
-  let upFurnace = 0;
-  let upQuench = 0;
+  let upHammer = 0;   // increases progress per strike
+  let upFurnace = 0;  // steadier heat + slightly slower timing
+  let upQuench = 0;   // stronger cooling + lower crack chance
 
-  // Recipes
+  // Recipes (weapon formulas)
   const recipes = [
     { id:0, key:"1", name:"KNIFE", targetLow:35, targetHigh:65, baseGain:10, heatRise:10, timingSpeed:0.020, coinBase:18 },
     { id:1, key:"2", name:"SWORD", targetLow:50, targetHigh:80, baseGain:8,  heatRise:12, timingSpeed:0.024, coinBase:26 },
@@ -80,24 +81,24 @@
   ];
   let recipe = recipes[0];
 
-  // Run stats
-  let heat = 45;
-  let prog = 0;
-  let timingX = 0;
-  let timingDir = 1;
+  // Run stats (rhythm + quality)
+  let heat = 45;           // 0..100
+  let prog = 0;            // 0..100
+  let timingX = 0;         // 0..1
+  let timingDir = 1;       // 1 or -1
 
   let combo = 0;
   let maxCombo = 0;
   let score = 0;
 
-  let cracks = 0;
+  let cracks = 0;          // >=3 = broken
   let perfect = 0, good = 0, bad = 0;
 
-  let lastHitText = "";
+  let lastHitText = "";    // PERFECT / GOOD / BAD / CRACK / QUENCH
   let forged = false;
   let failed = false;
 
-  // ---- beginner-ish drawing helpers ----
+  // --------- beginner-ish drawing helpers ---------
   function cls(){ g.fillStyle = COL.black; g.fillRect(0,0,320,240); }
   function rect(x,y,w,h,col){ g.fillStyle = col; g.fillRect(x,y,w,h); }
   function lineH(y,col){ rect(0,y,320,1,col); }
@@ -119,6 +120,7 @@
     text(10,24,title,18,COL.white);
   }
 
+  // --------- screens ---------
   function drawMenu(){
     cls();
     drawHeader("MINI GAME");
@@ -133,6 +135,7 @@
     text(46,98,"BLACKSMITH",26,COL.white);
     text(48,132,"A: Start (Workshop)",14,COL.white);
 
+    // anvil icon blocks
     rect(240,108,42,10,COL.cyan);
     rect(248,98,26,12,COL.cyan);
     rect(236,100,18,8,COL.cyan);
@@ -186,10 +189,12 @@
     g.strokeStyle = COL.white;
     g.strokeRect(60.5,68.5,240,14);
 
-    rect(60 + 110, 69, 40, 12, "#203a4a"); // sweet zone
+    // sweet zone
+    rect(60 + 110, 69, 40, 12, "#203a4a");
 
+    // pointer
     const px = 60 + Math.floor(240 * timingX);
-    rect(px, 69, 3, 12, COL.yellow); // pointer
+    rect(px, 69, 3, 12, COL.yellow);
   }
 
   function drawGame(){
@@ -217,16 +222,19 @@
 
     drawTimingBar();
 
-    rect(40,140,240,70,COL.dgrey); // anvil area
+    // anvil area
+    rect(40,140,240,70,COL.dgrey);
 
-    rect(110,168,140,8,COL.silver); // blade
+    // blade
+    rect(110,168,140,8,COL.silver);
     g.fillStyle = COL.silver;
     g.beginPath();
     g.moveTo(250,168); g.lineTo(268,172); g.lineTo(250,176);
     g.closePath(); g.fill();
 
-    rect(55,92,12,40,"#8b5a2b"); // hammer handle
-    rect(45,82,32,14,COL.lgrey); // hammer head
+    // hammer block
+    rect(55,92,12,40,"#8b5a2b");
+    rect(45,82,32,14,COL.lgrey);
 
     lineH(216,COL.dgrey);
     text(10,232,"A: Strike   Q: Quench   B: Back",12,COL.lgrey);
@@ -252,7 +260,7 @@
     text(10,232,"A: Workshop   B: Menu",12,COL.lgrey);
   }
 
-  // ---- upgrades ----
+  // --------- upgrades ---------
   function buyHammer(){
     let cost = 20 + upHammer*15;
     if(coins >= cost){ coins -= cost; upHammer++; }
@@ -266,20 +274,33 @@
     if(coins >= cost){ coins -= cost; upQuench++; }
   }
 
-  // ---- run reset / navigation ----
+  // --------- run reset ---------
   function resetRun(){
-    heat = 45; prog = 0; timingX = 0; timingDir = 1;
-    combo = 0; maxCombo = 0; score = 0;
-    cracks = 0; perfect = 0; good = 0; bad = 0;
-    lastHitText = ""; forged = false; failed = false;
+    heat = 45;
+    prog = 0;
+    timingX = 0;
+    timingDir = 1;
+
+    combo = 0; maxCombo = 0;
+    score = 0;
+
+    cracks = 0;
+    perfect = 0; good = 0; bad = 0;
+
+    lastHitText = "";
+    forged = false;
+    failed = false;
   }
+
   function goMenu(){ page = 0; drawMenu(); }
   function goWorkshop(){ page = 2; drawWorkshop(); }
   function goLoading(){ page = 1; loadingEnd = Date.now() + 600; drawLoading(); }
   function goGame(){ page = 3; resetRun(); drawGame(); }
 
-  // ---- judging ----
+  // --------- judging ---------
   function timingJudge(){
+    // sweet zone: 0.46..0.62
+    // perfect zone: 0.52..0.56
     if(timingX >= 0.52 && timingX <= 0.56) return "PERFECT";
     if(timingX >= 0.46 && timingX <= 0.62) return "GOOD";
     return "BAD";
@@ -288,7 +309,7 @@
     return (heat >= recipe.targetLow && heat <= recipe.targetHigh);
   }
 
-  // ---- strike ----
+  // --------- strike ---------
   function doStrike(){
     if(page !== 3) return;
     if(forged || failed) return;
@@ -300,6 +321,7 @@
     else if(tj === "GOOD") good++;
     else bad++;
 
+    // combo requires non-BAD timing AND correct heat
     if(tj !== "BAD" && okHeat){
       combo++;
       if(combo > maxCombo) maxCombo = combo;
@@ -307,6 +329,7 @@
       combo = 0;
     }
 
+    // progress gain
     let gain = recipe.baseGain;
     if(tj === "PERFECT") gain = Math.floor(gain * 1.6);
     if(tj === "GOOD")    gain = Math.floor(gain * 1.15);
@@ -314,11 +337,13 @@
 
     if(!okHeat) gain = Math.floor(gain * 0.5);
 
-    gain = Math.floor(gain * (1 + upHammer * 0.08)); // hammer upgrade
+    // hammer upgrade bonus (+8% each)
+    gain = Math.floor(gain * (1 + upHammer * 0.08));
 
     prog += gain;
     if(prog > 100) prog = 100;
 
+    // score gain + combo multiplier (+5% per combo)
     let baseScore = 10;
     if(tj === "PERFECT") baseScore = 25;
     if(tj === "GOOD")    baseScore = 15;
@@ -329,6 +354,7 @@
     let mult = 1 + combo * 0.05;
     score += Math.floor(baseScore * mult);
 
+    // heat rises on strike
     heat += recipe.heatRise;
     if(heat > 100) heat = 100;
 
@@ -343,7 +369,7 @@
     drawGame();
   }
 
-  // ---- quench ----
+  // --------- quench ---------
   function doQuench(){
     if(page !== 3) return;
     if(forged || failed) return;
@@ -352,6 +378,7 @@
     heat -= drop;
     if(heat < 0) heat = 0;
 
+    // crack chance depends on pre-quench heat
     let preHeat = heat + drop;
 
     let crackChance = 0;
@@ -378,7 +405,7 @@
     drawGame();
   }
 
-  // ---- grading ----
+  // --------- grading ---------
   function calcGrade(){
     if(failed) return "F";
 
@@ -413,33 +440,39 @@
     drawResults(grade, coinEarned);
   }
 
-  // ---- input routing ----
+  // --------- input routing ---------
   function pressA(){
     if(page === 0){ goLoading(); return; }
     if(page === 2){ goLoading(); return; }
     if(page === 4){ goWorkshop(); return; }
     if(page === 3){ doStrike(); return; }
   }
+
   function pressB(){
     if(page === 3){ goWorkshop(); return; }
     if(page === 2){ goMenu(); return; }
     if(page === 4){ goMenu(); return; }
   }
+
   function pressQ(){
     if(page === 3){ doQuench(); }
   }
+
   function pickRecipe(id){
     recipe = recipes[id];
     if(page === 2) drawWorkshop();
   }
 
-  // ---- buttons ----
+  // buttons
   document.getElementById("btnA").onclick = pressA;
   document.getElementById("btnB").onclick = pressB;
   document.getElementById("btnQ").onclick = pressQ;
-  document.getElementById("btnR").onclick = () => { coins=0; upHammer=0; upFurnace=0; upQuench=0; goMenu(); };
+  document.getElementById("btnR").onclick = () => {
+    coins=0; upHammer=0; upFurnace=0; upQuench=0;
+    goMenu();
+  };
 
-  // ---- keyboard ----
+  // keyboard
   window.addEventListener("keydown", (e) => {
     if(e.key === "a" || e.key === "A" || e.code === "Space") pressA();
     if(e.key === "b" || e.key === "B") pressB();
@@ -456,7 +489,7 @@
     }
   });
 
-  // ---- loop ----
+  // --------- main loop (loading + timing + heat model) ---------
   function tick(){
     const now = Date.now();
 
@@ -465,8 +498,10 @@
     }
 
     if(page === 3){
+      // timing motion (rhythm)
       let sp = recipe.timingSpeed;
 
+      // furnace upgrade slightly slows timing (easier)
       sp = sp * (1 - upFurnace * 0.03);
       if(sp < 0.012) sp = 0.012;
 
@@ -474,12 +509,14 @@
       if(timingX > 1){ timingX = 1; timingDir = -1; }
       if(timingX < 0){ timingX = 0; timingDir = 1; }
 
+      // furnace heat model: heat slowly moves toward a target
       let furnaceTarget = 70 + upFurnace * 4;
       if(furnaceTarget > 92) furnaceTarget = 92;
 
       let diff = furnaceTarget - heat;
       heat += diff * 0.004;
 
+      // natural cooling
       heat -= 0.06;
 
       if(heat < 0) heat = 0;
